@@ -307,6 +307,7 @@ unsafe impl<T: SurfaceTypeTrait + ResizeableSurface> Backend for GlutinBackend<T
 pub struct SimpleWindowBuilder {
     attributes: winit::window::WindowAttributes,
     config_template_builder: glutin::config::ConfigTemplateBuilder,
+    vsync: bool,
 }
 
 #[cfg(feature = "simple_window_builder")]
@@ -318,7 +319,7 @@ impl SimpleWindowBuilder {
                 .with_title("Simple Glium Window")
                 .with_inner_size(winit::dpi::PhysicalSize::new(800, 480)),
             config_template_builder: glutin::config::ConfigTemplateBuilder::new(),
-
+            vsync: false,
         }
     }
 
@@ -337,16 +338,29 @@ impl SimpleWindowBuilder {
         self
     }
 
+    /// Attempts to enable vsync for the window.
+    /// If this is not set, vync will be disabled.
+    pub fn with_vsync(mut self) -> Self {
+        self.vsync = true;
+        self
+    }
+
     /// Replace the used [`WindowBuilder`](winit::window::WindowBuilder),
     /// do this before you set other parameters or you'll overwrite the parameters.
-    pub fn set_window_builder(mut self, window_attributes: winit::window::WindowAttributes) -> Self {
+    pub fn set_window_builder(
+        mut self,
+        window_attributes: winit::window::WindowAttributes,
+    ) -> Self {
         self.attributes = window_attributes;
         self
     }
 
     /// Replace the used [`ConfigTemplateBuilder`](glutin::config::ConfigTemplateBuilder),
     /// Can be used to configure among other things buffer sizes and number of samples for the window.
-    pub fn with_config_template_builder(mut self, config_template_builder: glutin::config::ConfigTemplateBuilder) -> Self {
+    pub fn with_config_template_builder(
+        mut self,
+        config_template_builder: glutin::config::ConfigTemplateBuilder,
+    ) -> Self {
         self.config_template_builder = config_template_builder;
         self
     }
@@ -385,7 +399,10 @@ impl SimpleWindowBuilder {
         let attrs =
             glutin::surface::SurfaceAttributesBuilder::<glutin::surface::WindowSurface>::new()
                 .build(
-                    window.window_handle().expect("couldn't obtain raw window handle").into(),
+                    window
+                        .window_handle()
+                        .expect("couldn't obtain raw window handle")
+                        .into(),
                     NonZeroU32::new(width).unwrap(),
                     NonZeroU32::new(height).unwrap(),
                 );
@@ -397,8 +414,12 @@ impl SimpleWindowBuilder {
                 .create_window_surface(&gl_config, &attrs)
                 .unwrap()
         };
-        let context_attributes = glutin::context::ContextAttributesBuilder::new()
-            .build(Some(window.window_handle().expect("couldn't obtain raw window handle").into()));
+        let context_attributes = glutin::context::ContextAttributesBuilder::new().build(Some(
+            window
+                .window_handle()
+                .expect("couldn't obtain raw window handle")
+                .into(),
+        ));
         let current_context = Some(unsafe {
             gl_config
                 .display()
@@ -408,6 +429,16 @@ impl SimpleWindowBuilder {
         .unwrap()
         .make_current(&surface)
         .unwrap();
+
+        let swap_interval = if self.vsync {
+            glutin::surface::SwapInterval::Wait(NonZeroU32::new(1).unwrap())
+        } else {
+            glutin::surface::SwapInterval::DontWait
+        };
+        surface
+            .set_swap_interval(&current_context, swap_interval)
+            .unwrap();
+
         let display = Display::from_context_surface(current_context, surface).unwrap();
 
         (window, display)
